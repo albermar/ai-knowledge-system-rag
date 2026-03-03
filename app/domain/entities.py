@@ -180,9 +180,9 @@ class LLMUsage:
         object.__setattr__(self, "total_tokens", total)
         
         
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class IngestDocumentResult:
-    status: bool
-    number_of_chunks: int
+    organization_id: uuid.UUID
     document_id: uuid.UUID
-    error_message: Optional[str] = None
+    chunks_created: int
+    document_hash: str | None

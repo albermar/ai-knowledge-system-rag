@@ -23,44 +23,44 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  #TODO: get from config
 DEFAULT_STORAGE_PATH = "./storage" #TODO: get from config
 
 @router.post("/ingest-document", response_model = IngestDocumentResponse )
-async def ingest_document(file: UploadFile = File(...), db: Session = Depends(get_db_session)):
-    
+async def ingest_document(file: UploadFile = File(...), db: Session = Depends(get_db_session)):    
     default_organization_id = uuid.UUID("00000000-0000-0000-0000-000000000000") #TODO: get from auth context or request header. For now, we use a default one for testing.
-    
-    # Receive the file, extract content, filename. Validate max size
+        
     file_bytes = await file.read() 
     filename = file.filename or ("doc-" + datetime.now().strftime("%Y%m%d%H%M%S"))
     size = len(file_bytes)
+    
     if size == 0 or size > MAX_FILE_SIZE_BYTES:   #10MB max size for now
         raise HTTPException(status_code=400, detail=f"File is empty or exceeds the maximum allowed size of {MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB.") 
+        
+    storage = Local_DocumentStorage(DEFAULT_STORAGE_PATH)
     
-    # Build the use case with the necessary dependencies (repositories, storage, parser, chunker)    
-    storage = Local_DocumentStorage(DEFAULT_STORAGE_PATH)   #TODO
     use_case = IngestDocument(
-        org_repo = PostgreSQL_OrganizationRepository(db),   #TODO
-        doc_repo = PostgreSQL_DocumentRepository(db),       #TODO
-        chunk_repo = PostgreSQL_ChunkRepository(db),        #TODO
-        storage = storage,                                  #TODO
-        parser = V1_PDFParser(),                            #TODO
+        org_repo = PostgreSQL_OrganizationRepository(db),
+        doc_repo = PostgreSQL_DocumentRepository(db),   
+        chunk_repo = PostgreSQL_ChunkRepository(db),   
+        storage = storage,
+        parser = V1_PDFParser(),
         chunker = V1_Chunker()                              #TODO
     )
     
-    try:    
-        result = use_case.execute(default_organization_id, file_bytes, filename)    #TODO
-        db.commit()
+    # 1- Execute the use case inside a try-except block to handle exceptions and ensure proper cleanup if something goes wrong. The use case will raise exceptions for various error conditions, which we can catch and convert to HTTP responses.    
+    result = None
+    try:        
+        result = use_case.execute(default_organization_id, file_bytes, filename)
     except Exception as e:
         db.rollback()
-        storage.delete_file(filename)        
-        raise HTTPException(status_code=500, detail=str(e)) #TODO. Placeholder. Later I will map specific exceptions to specific status codes and messages.
-        
-    return IngestDocumentResponse.from_domain(result) #is it result visible here? Yes, it's defined in the try block, but since we return immediately after, it's fine.
+        raise HTTPException(status_code=500, detail=str(e))
 
-'''
-1. Endpoint tasks and duties
-    - ✅ Receive the file, extract the content and filename. Validate max size. 
-    - ✅ Build the use case with the necessary dependencies (repositories, storage, parser, chunker)
-    - ✅ Execute the use case with the organization_id, file content and filename
-    - ✅ Map Exceptions to HTTP errors.
-    - ✅ Commit or roll back if any exception happens. If storage succeded after a DB exception, delete file.
-    - ✅ Return the response (pydantic) based on the use case result (domain entity)
-'''
+    #2- Now Commit. 
+    try:
+        db.commit() 
+    except Exception as e:
+        db.rollback()
+        try:
+            storage.delete(default_organization_id, result.document_id)
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Failed to commit transaction: {str(e)}")
+    #3- Return response
+    return IngestDocumentResponse.from_domain(result)

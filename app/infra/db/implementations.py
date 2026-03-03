@@ -38,7 +38,8 @@ class PostgreSQL_OrganizationRepository(OrganizationRepositoryInterface):
         orm_obj = self.db_session.get(OrganizationORM, id)
         if orm_obj is not None:
             self.db_session.delete(orm_obj)
-        
+
+#✅#       
 class PostgreSQL_DocumentRepository(DocumentRepositoryInterface):
     def __init__(self, db_session: Session):
         self.db_session = db_session
@@ -107,10 +108,39 @@ class PostgreSQL_DocumentRepository(DocumentRepositoryInterface):
         if orm_obj is not None:
             self.db_session.delete(orm_obj)      
 
+#✅#
 class PostgreSQL_ChunkRepository(ChunkRepositoryInterface):
     def __init__(self, db_session: Session):
         self.db_session = db_session
+    
+    @staticmethod
+    def _to_entity(orm_obj: ChunkORM) -> Chunk:
+        return Chunk(
+            document_id=orm_obj.document_id,
+            organization_id=orm_obj.organization_id,
+            chunk_index=orm_obj.chunk_index,
+            content=orm_obj.content,
+            token_count=orm_obj.token_count,
+            id=orm_obj.id,
+            created_at=orm_obj.created_at
+        )
         
+    @staticmethod
+    def _to_orm(chunk: Chunk) -> ChunkORM:
+        return ChunkORM(
+            document_id=chunk.document_id,
+            organization_id=chunk.organization_id,
+            chunk_index=chunk.chunk_index,
+            content=chunk.content,
+            token_count=chunk.token_count,
+            id=chunk.id,
+            created_at=chunk.created_at
+        )
+        
+    def add_many(self, chunks: List[Chunk]) -> None:
+        # create orm objects from entities, then bulk save.
+        orm_objs = [self._to_orm(c) for c in chunks]        
+        self.db_session.add_all(orm_objs)
         
 
 #playground for testing the repositories. This code will be deleted later.

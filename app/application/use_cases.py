@@ -7,6 +7,18 @@ from app.domain.interfaces import ChunkRepositoryInterface, ChunkerInterface, Do
 
 import hashlib
 
+from app.application.exceptions import (
+    UseCaseError,
+    DocumentAlreadyExistsError,
+    IngestDocumentError,
+    EmptyFileError,
+    UnsupportedFileTypeError,
+    StorageDeleteError, 
+    StorageWriteError, 
+    ParsingError,
+    ChunkingError,
+    PersistenceError    
+)
 
 @dataclass
 class IngestDocument:
@@ -19,28 +31,25 @@ class IngestDocument:
 
 
     def execute(self, organization_id: uuid.UUID, file_content: bytes, filename: str) -> IngestDocumentResult:
-        #Validate the organization_id (exists)
+
+        if not file_content:
+            raise EmptyFileError("The provided file is empty.")
         
         # Organization must exist
         if self.org_repo.get_by_id(organization_id) is None:
-            raise ValueError("Organization not found")
-        
-        # Basic PDF Check. Parser will do this later
-        if not file_content.startswith(b'%PDF-'):
-            raise ValueError("Invalid file type. Only PDFs are allowed.")
+            raise PersistenceError("Organization not found")
         
         # Parse
-        parsed_content = self.parser.parse_pdf(file_content)
+        parsed_content = self.parser.parse_pdf(file_content) #can return ValueError if type is not pdf. 
         if not parsed_content or not parsed_content.strip():
-            raise ValueError("Parsed content is empty.")
+            raise ParsingError("Parsed content is empty.")
         
         # Dedup: org + sha256(file bytes)
         document_hash = hashlib.sha256(file_content).hexdigest()
         if self.doc_repo.get_by_hash(organization_id, document_hash) is not None:
-            raise ValueError("Document already exists.")
+            raise DocumentAlreadyExistsError("Document already exists.")
         
         #Persist. DB commit happens in the endpoint.
-        chunks: list[Chunk] = [] 
         file_saved = False
         document: Document | None = None
         try:
@@ -52,48 +61,49 @@ class IngestDocument:
                 document_hash=document_hash
             )
             
-            # DB. Add document metadata and content            
-            self.doc_repo.add(document) #save the document metadata + parsed content in the repo (database)
+            try:
+                # DB. Add document metadata and content            
+                self.doc_repo.add(document) #save the document metadata + parsed content in the repo (database)
+            except Exception as e:
+                raise PersistenceError(f"Failed to save document metadata: {str(e)}") from e
             
-            # Storage: Save raw file
-            self.storage.save(organization_id= organization_id, document_id=document.id, content=file_content) #save the original file in the storage with the document id as reference.
-            file_saved = True
+            try: 
+                # Storage: Save raw file
+                self.storage.save(organization_id= organization_id, document_id=document.id, content=file_content) #save the original file in the storage with the document id as reference.
+                file_saved = True
+            except Exception as e:
+                raise StorageWriteError(f"Failed to save document file: {str(e)}") from e
             
-            #Chunk + DB
-            chunks = self.chunker.chunk_text(
+            #Chunking
+            try: 
+                chunks: list[Chunk] = self.chunker.chunk_text(
                 organization_id=organization_id, 
                 document_id=document.id, 
                 content=parsed_content
-            )
+                )
+            except Exception as e:
+                raise ChunkingError(f"Failed to chunk document content: {str(e)}") from e
             
-            self.chunk_repo.add_many(chunks)
-            
-            return IngestDocumentResult(
-                status = True, 
-                document_id=document.id, 
-                number_of_chunks=len(chunks), 
-                error_message=None
-            )            
-            
-        except Exception as e:
-            if file_saved and document is not None
-                try:
-                    self.storage.delete(organization_id=organization_id, document_id=document.id)
-                except Exception:
-                    pass
-            
-            #If document exists, include its id for check later. otherwise raise
-            if document is None
-                raise
+            try:             
+                self.chunk_repo.add_many(chunks)
+            except Exception as e:
+                raise PersistenceError(f"Failed to save document chunks: {str(e)}") from e
             
             return IngestDocumentResult(
-                status=False,
-                number_of_chunks=0,  # avoid implying persistence
+                organization_id=organization_id,
                 document_id=document.id,
-                error_message=str(e),
+                chunks_created=len(chunks),
+                document_hash=document_hash
             )
-                    
             
+        except Exception:
+            #cleanup storage if it was saved. 
+            if file_saved and document is not None:
+                try:
+                    self.storage.delete(organization_id, document.id)
+                except Exception as e:
+                    raise StorageDeleteError(f"Failed to delete document file during cleanup: {str(e)}") from e                    
+            raise
 
 
 

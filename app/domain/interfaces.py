@@ -85,19 +85,22 @@ class ChunkRepositoryInterface(ABC):
     @abstractmethod
     def add_many(self, chunks: List[Chunk]) -> None:
         ...
-    @abstractmethod
-    def get_by_document(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> List[Chunk]: #double safety with organization_id as a parameter.
-        ...
-    @abstractmethod
-    def get_by_ids_in_order(self, organization_id: uuid.UUID, ids: List[uuid.UUID]) -> List[Chunk]: #double safety with organization_id as a parameter.
+    #@abstractmethod
+    #def get_by_document(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> List[Chunk]: #double safety with organization_id as a parameter.
+    #    ...
+    
+    #@abstractmethod
+    #def get_by_ids_in_order(self, organization_id: uuid.UUID, ids: List[uuid.UUID]) -> List[Chunk]: #double safety with organization_id as a parameter.
         """
         Return chunks in the same order as the input ids. 
         Not found ids are ignored.
         """        
-        ...
-    @abstractmethod
-    def delete_by_document(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> None: #double safety with organization_id as a parameter.
-        ...
+    #    ...
+    
+    #@abstractmethod
+    #def delete_by_document(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> None: #double safety with organization_id as a parameter.
+    #    ...
+    
     
 class QueryChunkRepositoryInterface(ABC):
     @abstractmethod
@@ -130,9 +133,9 @@ class DocumentStorageInterface(ABC):
     @abstractmethod
     def save(self, organization_id: uuid.UUID, document_id: uuid.UUID, content: bytes) -> None:
         ...
-    @abstractmethod
-    def load(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> bytes:
-        ...
+    #@abstractmethod
+    #def load(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> bytes:
+    #    ...
     @abstractmethod
     def delete(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> None:
         ...
