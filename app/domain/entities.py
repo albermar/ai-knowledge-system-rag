@@ -185,3 +185,4 @@ class IngestDocumentResult:
     status: bool
     number_of_chunks: int
     document_id: uuid.UUID
+    error_message: Optional[str] = None

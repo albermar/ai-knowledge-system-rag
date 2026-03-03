@@ -133,6 +133,9 @@ class DocumentStorageInterface(ABC):
     @abstractmethod
     def load(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> bytes:
         ...
+    @abstractmethod
+    def delete(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> None:
+        ...
 
 # --- # 
 class PDFParserInterface(ABC):
