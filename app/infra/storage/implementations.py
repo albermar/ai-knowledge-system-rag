@@ -33,25 +33,3 @@ class Local_DocumentStorage(DocumentStorageInterface):
             path.unlink()
         except FileNotFoundError:
             pass #if the file doesn't exist, we can consider it already deleted, so we ignore the error.
-        
-        
-
-if __name__ == "__main__":
-    #test with a temporary document
-    storage = Local_DocumentStorage(base_path="./samples")
-    #org_id = uuid.uuid4() #generate a random organization id
-    org_id = uuid.UUID("89d5d152-0011-42b2-b711-724a4878f86d") #fixed organization id for testing
-    
-    for i in range(100):    
-        doc_id = uuid.uuid4() #generate a random document id 
-        content = f"Hello, world! {i}".encode("utf-8") #encode the content as bytes
-        storage.save(org_id, doc_id, content)
-    #loaded_content = storage.load(org_id, doc_id)
-    #assert loaded_content == content
-    
-    #delete all documents for that organization
-    for file in (Path("./samples") / str(org_id)).glob("*.bin"):
-        file.unlink()
-    
-    
-    

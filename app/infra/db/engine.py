@@ -1,7 +1,6 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.infra.db.base import MyBase
 
 from app.infra.db.db_url_builder import get_db_url
 
@@ -17,5 +16,3 @@ def get_db_session():
         yield db
     finally:
         db.close()
-
-

@@ -34,13 +34,3 @@ class V1_PDFParser(PDFParserInterface):
                 text_chunks.append(page_text)
 
         return "\n".join(text_chunks)
-
-
-if __name__ == "__main__":
-    #simple test use the parse_pdf function
-    parser = V1_PDFParser()
-    with open("./samples/doc1.pdf", "rb") as f:
-        content = f.read()
-        extracted_text = parser.parse_pdf(content)
-        print(extracted_text[:5000]) #print the first 500 characters of the extracted text
-    

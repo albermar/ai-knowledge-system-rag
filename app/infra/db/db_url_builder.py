@@ -12,6 +12,6 @@ def get_db_url() -> str:
     password = os.environ["DB_PASSWORD"]
     name = os.environ["DB_NAME"]
     host = os.environ["DB_HOST"]
-    port = os.environ["DB_PORT"]
+    port = os.environ["DB_PORT"]   
     
     return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"

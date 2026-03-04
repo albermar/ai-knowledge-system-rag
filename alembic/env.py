@@ -1,6 +1,8 @@
 from app.infra.db.base import MyBase
-from app.infra.db.db_url_builder import get_db_url 
 import app.infra.db.ormmodels
+
+from app.infra.db.db_url_builder import get_db_url 
+
 
 from logging.config import fileConfig
 
