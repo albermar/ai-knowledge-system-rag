@@ -1,6 +1,7 @@
 from datetime import datetime
 import uuid
 
+from app.application.exceptions import ChunkPersistenceError, ChunkingError, DocumentAlreadyExistsError, DocumentPersistError, EmptyFileError, OrganizationNotFoundError, ParsingError, StorageDeleteError, StorageWriteError
 from fastapi import File, UploadFile, Depends, HTTPException
 from fastapi import APIRouter
 from sqlalchemy.orm import Session 
@@ -30,8 +31,13 @@ async def ingest_document(file: UploadFile = File(...), db: Session = Depends(ge
     filename = file.filename or ("doc-" + datetime.now().strftime("%Y%m%d%H%M%S"))
     size = len(file_bytes)
     
-    if size == 0 or size > MAX_FILE_SIZE_BYTES:   #10MB max size for now
-        raise HTTPException(status_code=400, detail=f"File is empty or exceeds the maximum allowed size of {MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB.") 
+    if size == 0:
+        raise HTTPException(status_code=400, detail="File is empty.")
+    if size > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File exceeds max size ({MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB).",
+        )
         
     storage = Local_DocumentStorage(DEFAULT_STORAGE_PATH)
     
@@ -44,23 +50,37 @@ async def ingest_document(file: UploadFile = File(...), db: Session = Depends(ge
         chunker = V1_Chunker()                              #TODO
     )
     
-    # 1- Execute the use case inside a try-except block to handle exceptions and ensure proper cleanup if something goes wrong. The use case will raise exceptions for various error conditions, which we can catch and convert to HTTP responses.    
     result = None
     try:        
         result = use_case.execute(default_organization_id, file_bytes, filename)
-    except Exception as e:
+        db.commit()
+        return IngestDocumentResponse.from_domain(result)
+    
+    except DocumentAlreadyExistsError as e:
         db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
+    except (EmptyFileError, ParsingError) as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except OrganizationNotFoundError as e:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(e))
+    except (DocumentPersistError, ChunkPersistenceError, StorageWriteError, ChunkingError) as e:
+        db.rollback()
+        if result is not None:
+            try:
+                storage.delete(default_organization_id, result.document_id)
+            except Exception:
+                pass
         raise HTTPException(status_code=500, detail=str(e))
-
-    #2- Now Commit. 
-    try:
-        db.commit() 
+    except StorageDeleteError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Document ingested but failed to clean up storage: {str(e)}")
     except Exception as e:
         db.rollback()
-        try:
-            storage.delete(default_organization_id, result.document_id)
-        except Exception:
-            pass
-        raise HTTPException(status_code=500, detail=f"Failed to commit transaction: {str(e)}")
-    #3- Return response
-    return IngestDocumentResponse.from_domain(result)
+        if result is not None:
+            try: 
+                storage.delete(default_organization_id, result.document_id)
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")

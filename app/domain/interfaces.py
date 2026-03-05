@@ -85,9 +85,9 @@ class ChunkRepositoryInterface(ABC):
     @abstractmethod
     def add_many(self, chunks: List[Chunk]) -> None:
         ...
-    #@abstractmethod
-    #def get_by_document(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> List[Chunk]: #double safety with organization_id as a parameter.
-    #    ...
+    @abstractmethod
+    def get_by_document(self, organization_id: uuid.UUID, document_id: uuid.UUID) -> List[Chunk]: #double safety with organization_id as a parameter.
+        ...
     
     #@abstractmethod
     #def get_by_ids_in_order(self, organization_id: uuid.UUID, ids: List[uuid.UUID]) -> List[Chunk]: #double safety with organization_id as a parameter.

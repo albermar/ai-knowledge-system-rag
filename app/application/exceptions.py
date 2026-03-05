@@ -37,3 +37,12 @@ class ChunkingError(IngestDocumentError):
 
 class PersistenceError(IngestDocumentError):
     pass
+
+class DocumentPersistError(IngestDocumentError):
+    pass
+
+class OrganizationNotFoundError(IngestDocumentError):
+    pass
+
+class ChunkPersistenceError(IngestDocumentError):
+    pass

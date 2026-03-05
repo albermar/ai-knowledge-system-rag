@@ -17,8 +17,12 @@ from app.application.exceptions import (
     StorageWriteError, 
     ParsingError,
     ChunkingError,
-    PersistenceError    
+    PersistenceError, 
+    DocumentPersistError,
+    OrganizationNotFoundError, 
+    ChunkPersistenceError
 )
+
 
 @dataclass
 class IngestDocument:
@@ -37,16 +41,22 @@ class IngestDocument:
         
         # Organization must exist
         if self.org_repo.get_by_id(organization_id) is None:
-            raise PersistenceError("Organization not found")
+            raise OrganizationNotFoundError("Organization not found")        
         
         # Parse
-        parsed_content = self.parser.parse_pdf(file_content) #can return ValueError if type is not pdf. 
+        try:
+            parsed_content = self.parser.parse_pdf(file_content) #can return ValueError if type is not pdf. 
+        except Exception as e:
+            raise ParsingError(f"Failed to parse PDF: {str(e)}") from e
+        
         if not parsed_content or not parsed_content.strip():
             raise ParsingError("Parsed content is empty.")
         
         # Dedup: org + sha256(file bytes)
         document_hash = hashlib.sha256(file_content).hexdigest()
-        if self.doc_repo.get_by_hash(organization_id, document_hash) is not None:
+        #print(f"Computed document hash: {document_hash}")
+        #print(f"Document with hash {self.doc_repo.get_by_hash(organization_id, document_hash).document_hash}")
+        if self.doc_repo.get_by_hash(organization_id, document_hash) is not None:            
             raise DocumentAlreadyExistsError("Document already exists.")
         
         #Persist. DB commit happens in the endpoint.
@@ -65,7 +75,7 @@ class IngestDocument:
                 # DB. Add document metadata and content            
                 self.doc_repo.add(document) #save the document metadata + parsed content in the repo (database)
             except Exception as e:
-                raise PersistenceError(f"Failed to save document metadata: {str(e)}") from e
+                raise DocumentPersistError(f"Failed to save document metadata: {str(e)}") from e
             
             try: 
                 # Storage: Save raw file
@@ -87,7 +97,7 @@ class IngestDocument:
             try:             
                 self.chunk_repo.add_many(chunks)
             except Exception as e:
-                raise PersistenceError(f"Failed to save document chunks: {str(e)}") from e
+                raise ChunkPersistenceError(f"Failed to save document chunks: {str(e)}") from e
             
             return IngestDocumentResult(
                 organization_id=organization_id,
