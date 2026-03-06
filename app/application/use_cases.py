@@ -9,6 +9,10 @@ from app.domain.interfaces import ChunkRepositoryInterface, ChunkerInterface, Do
 import hashlib
 
 from app.application.exceptions import (
+    LLMUsagePersistenceError,
+    NoRelevantChunksFoundError,
+    QueryChunkPersistenceError,
+    QueryPersistenceError,
     UseCaseError,
     DocumentAlreadyExistsError,
     IngestDocumentError,
@@ -176,42 +180,58 @@ class AskQuestion:
     
     
     def execute(self, organization_id: uuid.UUID, question: str) -> AskQuestionResult:
-        
-        # 3. Performing a vector search on the chunks to find relevant ones.
-        # 4. Building a prompt with the question and retrieved chunks.
-        # 5. Calling the LLM to get an answer.
-        # 6. Storing the query, answer, LLM usage, and query-chunk relationships in the respective repositories.
-        # 7. Returning the answer.
-        
         # 1. Validating the organization exists.
         if self.org_repo.get_by_id(organization_id) is None:
             raise OrganizationNotFoundError("Organization not found")
         
+        # 2. Validate question
         clean_question = (question or "").strip()
         if not clean_question:
             raise EmptyQuestionError("Question cannot be empty.")
         
-        # 2. Retrieve chunks. The retriever needs to have the embedder injected. But that was already done in the composition root, so here we just call the retriever method. Clean architecture is amazing.
-        retrieved_chunks: list[RetrievedChunk] = self.retriever.retrieve_best_chunks(organization_id=organization_id, question=clean_question)
-        
-        # 3. Build rompt for llm        
-        prompt: str = self.prompt_builder.build_prompt(clean_question, retrieved_chunks)
-        
-        # 4 call the llm and get the answer (with metadata)
-        llm_response: LLMResponse = self.llm_client.call(prompt)
-        
-        #Now we have all the pieces. We need to create the DTO for the endpoint (LLMResponse) and also persist in the database: Query, QueryChunk relationships and LLMUsage.
-        
-        #Persist query, usage and query-chunk relationships. DB commit happens in the endpoint.
-        try:     
+        # 3. PErist query as soon as the request is valid.
+        try:
             query = Query(
                 organization_id=organization_id, 
                 question=clean_question, 
-                answer=llm_response.generated_answer , 
-                latency_ms=llm_response.latency_ms
+                answer = None, 
+                latency_ms = None
                 )
-            self.query_repo.add(query) #TODO implementation
-            
+            self.query_repo.add(query)
+        except Exception as e:
+            raise QueryPersistenceError(f"Failed to persist query: {str(e)}") from e 
+        
+        #4. Retrieve relevant chunks
+        try:
+            retrieved_chunks: list[RetrievedChunk] = self.retriever.retrieve_best_chunks(organization_id=organization_id, question=clean_question)        
+        except Exception as e:
+            raise UseCaseError(f"Failed to retrieve relevant chunks: {str(e)}") from e
+        
+        if not retrieved_chunks:
+            raise NoRelevantChunksFoundError("No relevant chunks found for the question.") 
+        
+        # 5. Build prompt from question + retrieved chunks      
+        try:  
+            prompt: str = self.prompt_builder.build_prompt(clean_question, retrieved_chunks)
+        except Exception as e:
+            raise UseCaseError(f"Failed to build prompt: {str(e)}") from e
+        
+        # 6. Call the LLM        
+        try:
+            llm_response: LLMResponse = self.llm_client.call(prompt)
+        except Exception as e:
+            raise UseCaseError(f"LLM call failed: {str(e)}") from e
+        
+        # 7. Persist final answer into query
+        try:
+            answered_query = query.mark_answered(answer=llm_response.generated_answer, latency_ms=llm_response.latency_ms)
+            self.query_repo.update(answered_query)
+            query = answered_query  
+        except Exception as e:
+            raise QueryPersistenceError(f"Failed to update query with answer: {str(e)}") from e
+        
+        # 8 Persist LLM usage
+        try:
             usage = LLMUsage(
                 query_id=query.id, 
                 model_name=llm_response.model_name, 
@@ -220,11 +240,13 @@ class AskQuestion:
                 total_tokens = llm_response.total_tokens,
                 estimated_cost_usd = llm_response.estimated_cost_usd
                 )
-            
             self.llm_usage_repo.add(usage)
-                        
+        except Exception as e:
+            raise LLMUsagePersistenceError(f"Failed to persist LLM usage: {str(e)}") from e
+        
+        # 9. Persist query-chunk relationships for analytics, auditability, and future features.
+        try:
             query_chunks = []
-            
             for i, rchunk in enumerate(retrieved_chunks):
                 qc = QueryChunk(
                     query_id=query.id, 
@@ -234,22 +256,21 @@ class AskQuestion:
                     )
                 query_chunks.append(qc)
             self.query_chunk_repo.add_links(query_chunks)
-            
         except Exception as e:
-            #TODO. Handle map exceptions, I know.
-            raise 
+            raise QueryChunkPersistenceError(f"Failed to persist query-chunk relationships: {str(e)}") from e
         
+        # 10. Return the answer and relevant metadata.
         return AskQuestionResult(
             query_id=query.id,
-            question=clean_question,
-            answer=llm_response.generated_answer,
-            latency_ms=llm_response.latency_ms,
-            usage = usage
+            question=query.question,
+            answer=query.answer,
+            model_name=usage.model_name,
+            latency_ms=query.latency_ms,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            total_tokens=usage.total_tokens,
+            estimated_cost_usd=usage.estimated_cost_usd
         )
     
-        
-        
-        
-        
         
         

@@ -66,3 +66,14 @@ class InvalidOrganizationNameError(NewOrganizationError):
 class EmptyQuestionError(AskQuestionError):
     pass
 
+class NoRelevantChunksFoundError(AskQuestionError):
+    pass
+
+class QueryPersistenceError(AskQuestionError):
+    pass
+
+class LLMUsagePersistenceError(AskQuestionError):
+    pass
+
+class QueryChunkPersistenceError(AskQuestionError):
+    pass

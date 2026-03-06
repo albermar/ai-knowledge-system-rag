@@ -71,9 +71,13 @@ class Chunk:
     # non-default fields first
     document_id: uuid.UUID
     organization_id: uuid.UUID
-    chunk_index: int  # mandatory
-    content: str  # mandatory
-    token_count: int | None = None
+    chunk_index: int
+    content: str
+    embedding: list[float]
+    
+    token_count: int | None
+    
+    
     id: uuid.UUID = field(default_factory=new_uuid)
     created_at: datetime = field(default_factory=utc_now)
 
@@ -88,6 +92,9 @@ class Chunk:
         if self.token_count is not None and self.token_count < 0:
             raise ValueError("Chunk.token_count cannot be negative.")
 
+        if not self.embedding:
+            raise ValueError("Chunk.embedding cannot be empty.")
+
         object.__setattr__(self, "content", content)
 
 
@@ -97,8 +104,10 @@ class Query:
     # non-default fields first
     organization_id: uuid.UUID
     question: str  # mandatory
-    answer: str | None = None
-    latency_ms: int | None = None
+    
+    answer: str | None
+    latency_ms: int | None
+    
     id: uuid.UUID = field(default_factory=new_uuid)
     created_at: datetime = field(default_factory=utc_now)
 
@@ -147,12 +156,14 @@ class QueryChunk:
 class LLMUsage:
     # non-default fields first
     query_id: uuid.UUID
-    model_name: str  # mandatory
-    prompt_tokens: int | None = None
-    completion_tokens: int | None = None
-    # aligned with common ORM setups: not nullable in DB -> keep as int in domain
+    model_name: str
+    
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     total_tokens: int = 0
+    
     estimated_cost_usd: float | None = None
+    
     id: uuid.UUID = field(default_factory=new_uuid)
     created_at: datetime = field(default_factory=utc_now)
 
@@ -163,21 +174,20 @@ class LLMUsage:
         if len(model_name) > 128:
             raise ValueError("LLMUsage.model_name too long (max 128).")
 
-        if self.prompt_tokens is not None and self.prompt_tokens < 0:
-            raise ValueError("LLMUsage.prompt_tokens cannot be negative.")
-        if self.completion_tokens is not None and self.completion_tokens < 0:
-            raise ValueError("LLMUsage.completion_tokens cannot be negative.")
+        if self.prompt_tokens < 0:
+            raise ValueError("prompt_tokens cannot be negative.")
+        if self.completion_tokens < 0:
+            raise ValueError("completion_tokens cannot be negative.")
+        if self.total_tokens < 0:
+            raise ValueError("total_tokens cannot be negative.")
 
         derived_total = self.prompt_tokens + self.completion_tokens
-        total = self.total_tokens if self.total_tokens != 0 else derived_total
-        
-        if total < 0:
-            raise ValueError("total_tokens cannot be negative.")
+        final_total = self.total_tokens if self.total_tokens != 0 else derived_total
 
         if self.estimated_cost_usd is not None and self.estimated_cost_usd < 0:
             raise ValueError("estimated_cost_usd cannot be negative.")
 
         object.__setattr__(self, "model_name", model_name)
-        object.__setattr__(self, "total_tokens", total)
+        object.__setattr__(self, "total_tokens", final_total)
         
    

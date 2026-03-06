@@ -1,6 +1,7 @@
 from typing import List
 import uuid
 
+from app.domain.types import RetrievedChunk
 from app.infra.db.engine import get_db_session
 from sqlalchemy.orm import Session
 
@@ -127,7 +128,8 @@ class PostgreSQL_ChunkRepository(ChunkRepositoryInterface):
             content=orm_obj.content,
             token_count=orm_obj.token_count,
             id=orm_obj.id,
-            created_at=orm_obj.created_at
+            created_at=orm_obj.created_at, 
+            embedding=orm_obj.embedding
         )
         
     @staticmethod
@@ -139,7 +141,8 @@ class PostgreSQL_ChunkRepository(ChunkRepositoryInterface):
             content=chunk.content,
             token_count=chunk.token_count,
             id=chunk.id,
-            created_at=chunk.created_at
+            created_at=chunk.created_at,
+            embedding=chunk.embedding
         )
         
     def add_many(self, chunks: List[Chunk]) -> None:
@@ -155,3 +158,39 @@ class PostgreSQL_ChunkRepository(ChunkRepositoryInterface):
             .all()
         )
         return [self._to_entity(o) for o in orm_objs]
+    
+    def vector_search(self, organization_id: uuid.UUID, embedded_question: list[float], top_k: int = 5) -> list[RetrievedChunk]:
+        ????????????
+        ????????????
+        ????????????
+
+class PostgreSQL_QueryRepository(QueryRepositoryInterface):
+    def __init__(self, db_session: Session):
+        self.db_session = db_session
+    
+    @staticmethod
+    def _to_entity(orm_obj: QueryORM) -> Query:
+        return Query(
+            id=orm_obj.id,
+            organization_id=orm_obj.organization_id,
+            question=orm_obj.question,
+            answer=orm_obj.answer,
+            latency_ms=orm_obj.latency_ms,
+            created_at=orm_obj.created_at
+        )
+    
+    @staticmethod
+    def _to_orm(query: Query) -> QueryORM:
+        return QueryORM(
+            id=query.id,
+            organization_id=query.organization_id,
+            question=query.question,
+            answer=query.answer,
+            latency_ms=query.latency_ms,
+            created_at=query.created_at
+        )
+    
+    def add(self, query: Query) -> None:
+        orm_obj = self._to_orm(query)
+        self.db_session.add(orm_obj)
+        self.db_session.flush()

@@ -25,6 +25,12 @@ class NewOrganizationResult:
 class AskQuestionResult:
     query_id: uuid.UUID
     question: str
-    answer: Optional[str]
-    latency_ms: Optional[int]
-    usage: Optional[LLMUsage]
+    model_name: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    
+    answer: str | None
+    latency_ms: int | None
+    estimated_cost_usd: float | None
+    

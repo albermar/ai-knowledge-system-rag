@@ -18,6 +18,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infra.db.base import MyBase
 
+from pgvector.sqlalchemy import Vector
+
 
 # =========================================================
 # Organization
@@ -118,6 +120,7 @@ class Chunk(MyBase):
 
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[List[float]] = mapped_column(Vector(1536), nullable=False)  # Store as JSON string or use a separate table for embeddings
     token_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
